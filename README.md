@@ -17,7 +17,7 @@ A port of [Pwnagotchi](https://github.com/jayofelern/pwnagotchi) for the Hak5 Wi
 
 1. Copy the `pagergotchi` folder to your Pager's payloads directory:
    ```
-   scp -r user root@172.16.52.1:/root/payloads/user/
+   scp -r user root@172.16.52.1:/root/payloads/user/reconnaissance/
    ```
 
 2. The payload will appear in the Pager's payload menu under Reconnaissance.
