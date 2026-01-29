@@ -1,0 +1,208 @@
+#!/bin/bash
+# Title: Pagergotchi
+# Description: Hak5 WiFi Pineapple Pager port of Pwnagotchi - WiFi handshake capture tool with cute ASCII face
+# Author: brAinphreAk
+# Version: 1.0
+# Category: Reconnaissance
+
+PAYLOAD_DIR="/root/payloads/user/reconnaissance/pagergotchi"
+DATA_DIR="$PAYLOAD_DIR/data"
+LOOT_DIR="/root/loot/pagergotchi"
+
+cd "$PAYLOAD_DIR" || {
+    LOG "red" "ERROR: $PAYLOAD_DIR not found"
+    exit 1
+}
+
+#
+# Setup local paths for bundled binaries and libraries
+#
+export PATH="$PAYLOAD_DIR/bin:$PATH"
+export PYTHONPATH="$PAYLOAD_DIR/lib:$PAYLOAD_DIR:$PYTHONPATH"
+export LD_LIBRARY_PATH="$PAYLOAD_DIR/lib:$LD_LIBRARY_PATH"
+
+#
+# Check for Python3 - the only required system dependency
+#
+if ! command -v python3 >/dev/null 2>&1; then
+    LOG ""
+    LOG "red" "=== MISSING REQUIREMENT ==="
+    LOG ""
+    LOG "Python3 is required to run Pagergotchi."
+    LOG "All other dependencies are bundled."
+    LOG ""
+    LOG "green" "GREEN = Install Python3 (requires internet)"
+    LOG "red" "RED   = Exit"
+    LOG ""
+
+    while true; do
+        BUTTON=$(WAIT_FOR_INPUT 2>/dev/null)
+        case "$BUTTON" in
+            "GREEN"|"A")
+                LOG ""
+                LOG "Updating package lists..."
+                opkg update 2>&1 | while IFS= read -r line; do LOG "  $line"; done
+                LOG ""
+                LOG "Installing Python3 (this may take a minute)..."
+                opkg install python3 2>&1 | while IFS= read -r line; do LOG "  $line"; done
+                LOG ""
+                # Verify installation succeeded
+                if command -v python3 >/dev/null 2>&1; then
+                    LOG "green" "Python3 installed successfully!"
+                    sleep 1
+                else
+                    LOG "red" "Failed to install Python3"
+                    LOG "red" "Check internet connection and try again."
+                    LOG ""
+                    LOG "Press any button to exit..."
+                    WAIT_FOR_INPUT >/dev/null 2>&1
+                    exit 1
+                fi
+                break
+                ;;
+            "RED"|"B")
+                LOG "Exiting."
+                exit 0
+                ;;
+        esac
+    done
+fi
+
+# Verify pwnagotchi_port Python module exists
+[ ! -d "$PAYLOAD_DIR/pwnagotchi_port" ] && {
+    LOG "red" "ERROR: pwnagotchi_port module not found"
+    exit 1
+}
+
+#
+# Setup
+#
+
+# Create directories
+mkdir -p "$LOOT_DIR" 2>/dev/null
+mkdir -p "$DATA_DIR" 2>/dev/null
+
+# Setup monitor mode interface
+setup_monitor_mode() {
+    local INTERFACE="wlan0mon"
+
+    if ! iw dev 2>/dev/null | grep -q "$INTERFACE"; then
+        LOG "Setting up monitor mode..."
+
+        ifconfig wlan0 down 2>/dev/null
+        iw dev wlan0 set type monitor 2>/dev/null
+        ifconfig wlan0 up 2>/dev/null
+        ip link set wlan0 name "$INTERFACE" 2>/dev/null
+
+        if ! iw dev 2>/dev/null | grep -q "$INTERFACE"; then
+            if command -v airmon-ng >/dev/null 2>&1; then
+                airmon-ng start wlan0 2>/dev/null
+            fi
+        fi
+
+        if iw dev 2>/dev/null | grep -q "$INTERFACE"; then
+            LOG "green" "Monitor mode enabled: $INTERFACE"
+            return 0
+        else
+            if iw dev wlan0 info 2>/dev/null | grep -q "type monitor"; then
+                LOG "green" "wlan0 already in monitor mode"
+                return 0
+            fi
+            LOG "red" "Failed to enable monitor mode"
+            return 1
+        fi
+    else
+        LOG "green" "Monitor mode already active: $INTERFACE"
+    fi
+    return 0
+}
+
+#
+# Main
+#
+
+# Show info/splash screen first
+LOG ""
+LOG "green" "=========================================="
+LOG "green" "             PAGERGOTCHI"
+LOG "green" "=========================================="
+LOG ""
+LOG "A port of Pwnagotchi for the Hak5"
+LOG "WiFi Pineapple Pager."
+LOG ""
+LOG "Features:"
+LOG "  - Automated WiFi handshake capture"
+LOG "  - PMKID and 4-way handshake attacks"
+LOG "  - Cute ASCII pet with personality"
+LOG "  - Optional GPS logging (WiGLE format)"
+LOG "  - Whitelist to protect your networks"
+LOG ""
+LOG "green" "GREEN = Start Pagergotchi"
+LOG "red" "RED   = Exit"
+LOG ""
+
+while true; do
+    BUTTON=$(WAIT_FOR_INPUT 2>/dev/null)
+    case "$BUTTON" in
+        "GREEN"|"A")
+            break
+            ;;
+        "RED"|"B")
+            LOG "Exiting."
+            exit 0
+            ;;
+    esac
+done
+
+# Now do setup after GREEN button pressed
+LOG ""
+SPINNER_ID=$(START_SPINNER "Setting up Pagergotchi...")
+
+if ! setup_monitor_mode; then
+    STOP_SPINNER "$SPINNER_ID" 2>/dev/null
+    LOG ""
+    LOG "red" "Monitor mode setup failed!"
+    LOG "Press any button to try anyway..."
+    WAIT_FOR_INPUT >/dev/null 2>&1
+    SPINNER_ID=$(START_SPINNER "Starting anyway...")
+fi
+
+# Stop services to free framebuffer (but keep pineapd running)
+/etc/init.d/php8-fpm stop 2>/dev/null
+/etc/init.d/nginx stop 2>/dev/null
+/etc/init.d/bluetoothd stop 2>/dev/null
+/etc/init.d/pineapplepager stop 2>/dev/null
+
+# Restart pineapd fresh for reliable recon (ensures clean state)
+STOP_SPINNER "$SPINNER_ID" 2>/dev/null
+LOG "Restarting pineapd for fresh recon..."
+/etc/init.d/pineapd restart 2>/dev/null
+sleep 3
+
+# Detect and setup GPS if available
+LOG "Detecting GPS device..."
+GPS_DEVICE=$(uci -q get gpsd.core.device 2>/dev/null)
+if [ -n "$GPS_DEVICE" ] && [ -e "$GPS_DEVICE" ]; then
+    LOG "green" "GPS detected: $GPS_DEVICE"
+    LOG "Restarting gpsd..."
+    /etc/init.d/gpsd restart 2>/dev/null
+    sleep 2
+else
+    LOG "No GPS device detected (optional)"
+fi
+
+sleep 0.5
+
+# Run Pagergotchi using proper pwnagotchi port
+# Uses original pwnagotchi code with native Pager display
+cd "$PAYLOAD_DIR"
+python3 run_pagergotchi.py
+
+# Cleanup
+killall hcxdumptool 2>/dev/null
+
+# Restore services
+/etc/init.d/php8-fpm start 2>/dev/null &
+/etc/init.d/nginx start 2>/dev/null &
+/etc/init.d/bluetoothd start 2>/dev/null &
+/etc/init.d/pineapplepager start 2>/dev/null &
