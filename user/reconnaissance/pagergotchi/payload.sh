@@ -22,16 +22,30 @@ export PYTHONPATH="$PAYLOAD_DIR/lib:$PAYLOAD_DIR:$PYTHONPATH"
 export LD_LIBRARY_PATH="$PAYLOAD_DIR/lib:$LD_LIBRARY_PATH"
 
 #
-# Check for Python3 - the only required system dependency
+# Check for Python3 and python3-ctypes - required system dependencies
 #
+NEED_PYTHON=false
+NEED_CTYPES=false
+
 if ! command -v python3 >/dev/null 2>&1; then
+    NEED_PYTHON=true
+    NEED_CTYPES=true
+elif ! python3 -c "import ctypes" 2>/dev/null; then
+    NEED_CTYPES=true
+fi
+
+if [ "$NEED_PYTHON" = true ] || [ "$NEED_CTYPES" = true ]; then
     LOG ""
     LOG "red" "=== MISSING REQUIREMENT ==="
     LOG ""
-    LOG "Python3 is required to run Pagergotchi."
+    if [ "$NEED_PYTHON" = true ]; then
+        LOG "Python3 is required to run Pagergotchi."
+    else
+        LOG "Python3-ctypes is required to run Pagergotchi."
+    fi
     LOG "All other dependencies are bundled."
     LOG ""
-    LOG "green" "GREEN = Install Python3 (requires internet)"
+    LOG "green" "GREEN = Install dependencies (requires internet)"
     LOG "red" "RED   = Exit"
     LOG ""
 
@@ -43,11 +57,11 @@ if ! command -v python3 >/dev/null 2>&1; then
                 LOG "Updating package lists..."
                 opkg update 2>&1 | while IFS= read -r line; do LOG "  $line"; done
                 LOG ""
-                LOG "Installing Python3 (this may take a minute)..."
-                opkg install python3 2>&1 | while IFS= read -r line; do LOG "  $line"; done
+                LOG "Installing Python3 + ctypes (this may take a minute)..."
+                opkg install python3 python3-ctypes 2>&1 | while IFS= read -r line; do LOG "  $line"; done
                 LOG ""
                 # Verify installation succeeded
-                if command -v python3 >/dev/null 2>&1; then
+                if command -v python3 >/dev/null 2>&1 && python3 -c "import ctypes" 2>/dev/null; then
                     LOG "green" "Python3 installed successfully!"
                     sleep 1
                 else
