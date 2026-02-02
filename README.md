@@ -162,10 +162,12 @@ interface = wlan1mon
 output_dir = /root/loot/handshakes/pagergotchi
 
 [channels]
-channels = 1,6,11
+# Leave empty to scan all channels, or specify: 1,6,11
+channels =
 
 [whitelist]
-ssids = MyHomeWiFi, MyPhone
+# Networks added via menu are saved to data/settings.json
+ssids =
 
 [deauth]
 enabled = true
