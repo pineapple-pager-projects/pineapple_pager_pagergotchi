@@ -157,16 +157,19 @@ Captured data goes to the standard Pager loot location:
 Edit `config.conf` for persistent settings:
 
 ```ini
+[general]
+debug = false
+
 [capture]
 interface = wlan1mon
 output_dir = /root/loot/handshakes/pagergotchi
 
 [channels]
-# Leave empty to scan all channels, or specify: 1,6,11
+# Leave empty for all 2.4/5/6GHz bands, or specify: 1,6,11
 channels =
 
 [whitelist]
-# Networks added via menu are saved to data/settings.json
+# Use on-screen menu for easier management with BSSID support
 ssids =
 
 [deauth]
@@ -175,9 +178,6 @@ enabled = true
 [timing]
 throttle_d = 0.9
 throttle_a = 0.4
-
-[general]
-debug = false
 ```
 
 Runtime settings (theme, privacy, etc.) are saved to `data/settings.json`.
