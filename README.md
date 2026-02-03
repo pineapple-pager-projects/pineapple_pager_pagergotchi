@@ -157,11 +157,11 @@ When enabled, sensitive data is obfuscated on the display:
 
 | Data Type | Example | Obfuscated |
 |-----------|---------|------------|
-| SSID | `CLOWNCAR` | `CXXXXXXR` |
-| MAC/BSSID | `AB:CD:EF:12:34:56` | `AB:CD:EF:XX:XX:XX` |
-| GPS | `37.7749, -122.4194` | `LAT 38 LON -77` |
+| SSID | `MyNetwork` | `MXXXXXXK` |
+| MAC/BSSID | `AA:BB:CC:11:22:33` | `AA:BB:CC:XX:XX:XX` |
+| GPS | (any coordinates) | `LAT 38 LON -77` |
 
-Privacy mode uses fixed coordinates near Washington D.C. for GPS display.
+Privacy mode always displays fixed fake coordinates near Washington D.C. regardless of actual GPS location.
 
 ## GPS Support
 
