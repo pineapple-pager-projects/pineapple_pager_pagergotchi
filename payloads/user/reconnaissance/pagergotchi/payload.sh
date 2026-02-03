@@ -19,10 +19,11 @@ cd "$PAYLOAD_DIR" || {
 #
 # Setup local paths for bundled binaries and libraries
 # Uses libpagerctl.so for display/input handling
+# MMC paths needed when python3 installed with opkg -d mmc
 #
-export PATH="$PAYLOAD_DIR/bin:$PATH"
+export PATH="/mmc/usr/bin:$PAYLOAD_DIR/bin:$PATH"
 export PYTHONPATH="$PAYLOAD_DIR/lib:$PAYLOAD_DIR:$PYTHONPATH"
-export LD_LIBRARY_PATH="$PAYLOAD_DIR/lib:$LD_LIBRARY_PATH"
+export LD_LIBRARY_PATH="/mmc/usr/lib:$PAYLOAD_DIR/lib:$LD_LIBRARY_PATH"
 
 #
 # Check for Python3 and python3-ctypes - required system dependencies
@@ -60,8 +61,8 @@ if [ "$NEED_PYTHON" = true ] || [ "$NEED_CTYPES" = true ]; then
                 LOG "Updating package lists..."
                 opkg update 2>&1 | while IFS= read -r line; do LOG "  $line"; done
                 LOG ""
-                LOG "Installing Python3 + ctypes (this may take a minute)..."
-                opkg install python3 python3-ctypes 2>&1 | while IFS= read -r line; do LOG "  $line"; done
+                LOG "Installing Python3 + ctypes to MMC..."
+                opkg -d mmc install python3 python3-ctypes 2>&1 | while IFS= read -r line; do LOG "  $line"; done
                 LOG ""
                 # Verify installation succeeded
                 if command -v python3 >/dev/null 2>&1 && python3 -c "import ctypes" 2>/dev/null; then
