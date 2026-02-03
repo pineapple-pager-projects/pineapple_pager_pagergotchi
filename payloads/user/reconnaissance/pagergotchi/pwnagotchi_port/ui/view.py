@@ -33,6 +33,7 @@ from pwnagotchi_port.ui.menu import (
     THEME_NAMES, FONT_DEJAVU, TTF_MEDIUM, TTF_LARGE, TTF_SMALL
 )
 
+
 # Font settings - use absolute path on Pager
 # Font directory relative to this file (works on both dev machine and Pager)
 _this_dir = os.path.dirname(os.path.abspath(__file__))
@@ -213,6 +214,11 @@ class View:
 
         plugins.on('ui_setup', self)
 
+        # Apply saved brightness setting
+        settings = load_settings()
+        brightness = settings.get('brightness', 100)
+        self._display.set_brightness(brightness)
+
         # Start refresh thread
         self._refresh_stop = False
         self._returning_to_menu = False
@@ -286,7 +292,7 @@ class View:
         if not hasattr(self, '_menu_settings'):
             self._menu_settings = load_settings()
 
-        num_options = 6  # Resume, Theme, Deauth, Privacy, Main Menu, Exit
+        num_options = 7  # Resume, Theme, Deauth, Privacy, Brightness, Main Menu, Exit
         needs_redraw = True
 
         if button == Pager.BTN_UP:
@@ -300,6 +306,8 @@ class View:
                 self._toggle_deauth()
             elif self._menu_selected == 3:  # Privacy
                 self._toggle_privacy()
+            elif self._menu_selected == 4:  # Brightness
+                self._adjust_brightness(button)
         elif button == Pager.BTN_A:  # Select
             if self._menu_selected == 0:  # Resume
                 return 'resume'
@@ -309,11 +317,13 @@ class View:
                 self._toggle_deauth()
             elif self._menu_selected == 3:  # Privacy
                 self._toggle_privacy()
-            elif self._menu_selected == 4:  # Main Menu
+            elif self._menu_selected == 4:  # Brightness - increase on select
+                self._adjust_brightness(Pager.BTN_RIGHT)
+            elif self._menu_selected == 5:  # Main Menu
                 # Show "returning to menu" screen immediately
                 self._draw_returning_screen()
                 return 'main_menu'
-            elif self._menu_selected == 5:  # Exit Pagergotchi
+            elif self._menu_selected == 6:  # Exit Pagergotchi
                 return 'exit'
         elif button == Pager.BTN_B:  # Back = Resume
             return 'resume'
@@ -352,6 +362,19 @@ class View:
         self._menu_settings['privacy_mode'] = not self._menu_settings['privacy_mode']
         save_settings(self._menu_settings)
 
+    def _adjust_brightness(self, button):
+        """Adjust screen brightness in 10% steps"""
+        current = self._menu_settings.get('brightness', 100)
+        if button == Pager.BTN_RIGHT:
+            new_val = min(100, current + 10)
+        else:
+            new_val = max(20, current - 10)  # Min 20% to prevent black screen
+
+        if new_val != current:
+            self._menu_settings['brightness'] = new_val
+            self._display.set_brightness(new_val)
+            save_settings(self._menu_settings)
+
     def _draw_pause_menu(self):
         """Draw pause menu overlay"""
         if not hasattr(self, '_menu_selected'):
@@ -377,11 +400,12 @@ class View:
             ('Theme:', current_theme, 'Synthwave'),  # (label, value, max_value)
             ('Deauth:', 'ON' if self._menu_settings.get('deauth_enabled', True) else 'OFF', 'OFF'),
             ('Privacy:', 'ON' if self._menu_settings.get('privacy_mode', False) else 'OFF', 'OFF'),
+            ('Brightness:', f"{self._menu_settings.get('brightness', 100)}%", '100%'),
             ('Main Menu', None, None),
             ('Exit Pagergotchi', None, None)
         ]
 
-        y = 58
+        y = 54
         for i, (label, value, max_value) in enumerate(options):
             is_selected = (i == selected)
 
@@ -389,7 +413,7 @@ class View:
                 # Toggle/cycle option with value - use fixed width so label doesn't shift
                 label_color = theme['selected'] if is_selected else theme['unselected']
 
-                if label == 'Theme:':
+                if label == 'Theme:' or label == 'Brightness:':
                     value_color = theme['accent']
                 else:
                     value_color = theme['on'] if value == 'ON' else theme['off']
@@ -408,7 +432,7 @@ class View:
                 color = theme['selected'] if is_selected else theme['unselected']
                 self._display.draw_ttf_centered(y, label, color, FONT_DEJAVU, TTF_MEDIUM)
 
-            y += 28
+            y += 22
 
         self._display.flip()
 

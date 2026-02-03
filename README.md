@@ -13,6 +13,7 @@ A port of [Pwnagotchi](https://github.com/jayofelern/pwnagotchi) for the Hak5 Wi
 - **Native Display** - Fast C library rendering via libpagerctl.so
 - **Non-Blocking Pause Menu** - Change settings while attacks continue in background
 - **Theme System** - 4 visual themes (Default, Cyberpunk, Matrix, Synthwave)
+- **Brightness Control** - Adjustable screen brightness (20-100%)
 - **Privacy Mode** - Obfuscates MACs, SSIDs, and GPS on display
 - **GPS Support** - Optional GPS logging in WiGLE-compatible format
 - **Whitelist & Blacklist** - Fine-grained target control with BSSID support
@@ -64,6 +65,7 @@ Press **RED** at any time during operation to open the pause menu. The agent con
 - **Theme** - Cycle through visual themes (LEFT/RIGHT to cycle)
 - **Deauth** - Toggle deauth attacks (ON/OFF)
 - **Privacy** - Toggle privacy mode (ON/OFF)
+- **Brightness** - Adjust screen brightness (LEFT/RIGHT, 20-100%)
 - **Main Menu** - Return to startup menu (stops current session)
 - **Exit Pagergotchi** - Cleanly exit to Pager launcher
 

@@ -952,6 +952,7 @@ def load_settings():
         'wigle_enabled': False,
         'log_aps_enabled': False,
         'theme': 'Default',  # Theme name: Default, Cyberpunk, Matrix, Synthwave
+        'brightness': 100,  # Screen brightness percentage (20-100)
     }
     try:
         if os.path.exists(SETTINGS_FILE):

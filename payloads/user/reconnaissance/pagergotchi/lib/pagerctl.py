@@ -244,6 +244,14 @@ class Pager:
         _lib.pager_clear_input_events.argtypes = []
         _lib.pager_clear_input_events.restype = None
 
+        # Backlight / Brightness
+        _lib.pager_set_brightness.argtypes = [c_int]
+        _lib.pager_set_brightness.restype = c_int
+        _lib.pager_get_brightness.argtypes = []
+        _lib.pager_get_brightness.restype = c_int
+        _lib.pager_get_max_brightness.argtypes = []
+        _lib.pager_get_max_brightness.restype = c_int
+
         # Image support
         _lib.pager_load_image.argtypes = [c_char_p]
         _lib.pager_load_image.restype = c_void_p
@@ -546,6 +554,25 @@ class Pager:
         to prevent stale events from triggering actions.
         """
         _lib.pager_clear_input_events()
+
+    # Backlight / Brightness
+    def set_brightness(self, percent):
+        """Set screen brightness as percentage (0-100).
+        Returns 0 on success, -1 if backlight control not available.
+        """
+        return _lib.pager_set_brightness(percent)
+
+    def get_brightness(self):
+        """Get current screen brightness as percentage (0-100).
+        Returns -1 if backlight control not available.
+        """
+        return _lib.pager_get_brightness()
+
+    def get_max_brightness(self):
+        """Get maximum brightness value from hardware.
+        Returns -1 if backlight control not available.
+        """
+        return _lib.pager_get_max_brightness()
 
     # Image support (JPG, PNG, BMP, GIF)
     def load_image(self, filepath):
