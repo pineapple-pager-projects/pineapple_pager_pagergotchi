@@ -148,7 +148,7 @@ Captured data goes to the standard Pager loot location:
 
 | Path | Contents |
 |------|----------|
-| `/root/loot/handshakes/pagergotchi/` | Captured .pcap and .22000 files |
+| `/root/loot/handshakes/` | Captured .pcap and .22000 files |
 | `/root/loot/wigle/` | WiGLE CSV exports |
 | `/root/loot/ap_logs/` | AP discovery logs |
 
@@ -162,7 +162,6 @@ debug = false
 
 [capture]
 interface = wlan1mon
-output_dir = /root/loot/handshakes/pagergotchi
 
 [channels]
 # Leave empty for all 2.4/5/6GHz bands, or specify: 1,6,11
