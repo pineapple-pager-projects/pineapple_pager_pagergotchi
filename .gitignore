@@ -27,3 +27,7 @@ data/
 *.backup
 *.bak
 *~
+
+# Screenshot capture tools
+capture_screenshot.py
+capture_screenshot.sh

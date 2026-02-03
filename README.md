@@ -42,9 +42,17 @@ A port of [Pwnagotchi](https://github.com/jayofelern/pwnagotchi) for the Hak5 Wi
 | **UP / DOWN** | Navigate menus |
 | **LEFT / RIGHT** | Toggle options / Cycle values |
 
+## Payload Launch
+
+When you select Pagergotchi from the payload menu, you'll see the launch screen:
+
+![Payload Launch](screenshots/payload-launch.png)
+
+Press **GREEN** to start or **RED** to exit.
+
 ## Startup Menu
 
-When launched, the startup menu provides these options:
+The startup menu provides these options:
 
 ![Startup Menu](screenshots/mainmenu.png)
 
@@ -55,11 +63,35 @@ When launched, the startup menu provides these options:
 - **Log APs** - Toggle AP discovery logging (ON/OFF)
 - **Clear History** - Reset attack tracking for all networks
 
+![Clear History](screenshots/clear-history.png)
+
+## Main Display
+
+Once started, Pagergotchi shows the main hunting display:
+
+![Startup](screenshots/startup.png)
+
+The display shows:
+- Channel and AP count
+- Uptime
+- Status messages and personality
+- ASCII face that reacts to activity
+- GPS coordinates (if available)
+- PWND count and battery status
+
+| Discovering APs | Client Found |
+|-----------------|--------------|
+| ![Discover AP](screenshots/discover-ap.png) | ![Client Discovered](screenshots/client-discovered.png) |
+
+| Deauthing | Handshake Captured |
+|-----------|-------------------|
+| ![Deauthed](screenshots/deauthed.png) | ![Handshake Captured](screenshots/handshake-captured.png) |
+
 ## Pause Menu
 
 Press **RED** at any time during operation to open the pause menu. The agent continues capturing handshakes in the background while the menu is displayed.
 
-![Pause Menu](screenshots/themes1.png)
+![Pause Menu](screenshots/pause-menu.png)
 
 - **Resume** - Return to main display
 - **Theme** - Cycle through visual themes (LEFT/RIGHT to cycle)
@@ -80,11 +112,11 @@ Press **RED** at any time during operation to open the pause menu. The agent con
 
 | Default | Cyberpunk |
 |---------|-----------|
-| ![Default Theme](screenshots/deauthing.png) | ![Cyberpunk Theme](screenshots/themes4.png) |
+| ![Default Theme](screenshots/themes-default.png) | ![Cyberpunk Theme](screenshots/themes-cyberpunk.png) |
 
 | Matrix | Synthwave |
 |--------|-----------|
-| ![Matrix Theme](screenshots/findingclient.png) | ![Synthwave Theme](screenshots/themes6.png) |
+| ![Matrix Theme](screenshots/themes-matrix.png) | ![Synthwave Theme](screenshots/themes-synthwave.png) |
 
 ## Deauth Scope
 
@@ -98,15 +130,24 @@ Networks added here will never be attacked. Use for:
 - Phone hotspots
 - Work networks
 
+![Whitelist Menu](screenshots/whitelist.png)
+
 ### Blacklist (Target Only These)
 When populated, ONLY these networks will be attacked. Use for:
 - Authorized penetration testing
 - Specific target assessments
 
 ### Adding Networks
+
+| Scan & Add | Manual Add |
+|------------|------------|
+| ![Scanning APs](screenshots/scanning-aps.png) | ![Manual Add](screenshots/manual-add.png) |
+
 - **Scan & Add** - Scan nearby networks and select from list
 - **Manual Add** - Enter SSID or BSSID directly
 - **View/Edit** - Remove entries from lists
+
+![Whitelist View](screenshots/whitelist-view.png)
 
 Both SSID and BSSID are stored, so networks are matched even if they hide their SSID.
 
