@@ -159,9 +159,9 @@ When enabled, sensitive data is obfuscated on the display:
 |-----------|---------|------------|
 | SSID | `MyNetwork` | `MXXXXXXK` |
 | MAC/BSSID | `AA:BB:CC:11:22:33` | `AA:BB:CC:XX:XX:XX` |
-| GPS | (any coordinates) | `LAT 38 LON -77` |
+| GPS | (any coordinates) | `LAT 38.871 LON -77.055` |
 
-Privacy mode always displays fixed fake coordinates near Washington D.C. regardless of actual GPS location.
+Privacy mode always displays fixed fake coordinates (the Pentagon) regardless of actual GPS location.
 
 ## GPS Support
 
