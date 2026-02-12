@@ -20,7 +20,10 @@ build/
 *.swo
 
 # Runtime data (created on device)
-data/
+data/settings.json
+data/recovery.json
+data/session.json
+data/.next_payload
 *.log
 
 # Backups
