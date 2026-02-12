@@ -8,16 +8,18 @@ A port of [Pwnagotchi](https://github.com/jayofelern/pwnagotchi) for the Hak5 Wi
 
 ## Features
 
-- **Automated WiFi Handshake Capture** - PMKID and 4-way handshake attacks
+- **Automated WiFi Handshake Capture** - PMKID and 4-way handshake attacks via pineapd
 - **Cute ASCII Pet** - Personality-driven face that reacts to activity
-- **Native Display** - Fast C library rendering via libpagerctl.so
-- **Non-Blocking Pause Menu** - Change settings while attacks continue in background
+- **Native Display** - Fast C library rendering via libpagerctl.so (480x222 RGB565)
+- **Non-Blocking Pause Menu** - Two-column settings layout with 2D navigation; attacks continue in background
 - **Theme System** - 4 visual themes (Default, Cyberpunk, Matrix, Synthwave)
-- **Brightness Control** - Adjustable screen brightness (20-100%)
+- **Brightness Control** - Adjustable screen brightness (20-100% in 10% steps)
+- **Auto-Dim** - Configurable idle timeout (Off/30s/60s) with adjustable dim level (20-60%)
 - **Privacy Mode** - Obfuscates MACs, SSIDs, and GPS on display
 - **GPS Support** - Optional GPS logging in WiGLE-compatible format
 - **Whitelist & Blacklist** - Fine-grained target control with BSSID support
 - **WiGLE Integration** - Export captures for WiGLE database uploads
+- **App Handoff** - Seamlessly switch to other payloads (e.g., Bjorn) from the pause menu ([details](APP_HANDOFF.md))
 - **Self-Contained** - All dependencies bundled, only requires Python3
 
 ## Installation
@@ -31,16 +33,7 @@ A port of [Pwnagotchi](https://github.com/jayofelern/pwnagotchi) for the Hak5 Wi
 
 3. The payload will appear in the Pager's payload menu under **Reconnaissance > Pagergotchi**
 
-4. On first run, Python3 will be auto-installed if needed
-
-## Controls
-
-| Button | Action |
-|--------|--------|
-| **GREEN (A)** | Select / Confirm |
-| **RED (B)** | Back / Pause Menu |
-| **UP / DOWN** | Navigate menus |
-| **LEFT / RIGHT** | Toggle options / Cycle values |
+4. On first run, Python3 will be auto-installed if needed (requires internet)
 
 ## Payload Launch
 
@@ -93,13 +86,7 @@ Press **RED** at any time during operation to open the pause menu. The agent con
 
 ![Pause Menu](screenshots/pause-menu.png)
 
-- **Resume** - Return to main display
-- **Theme** - Cycle through visual themes (LEFT/RIGHT to cycle)
-- **Deauth** - Toggle deauth attacks (ON/OFF)
-- **Privacy** - Toggle privacy mode (ON/OFF)
-- **Brightness** - Adjust screen brightness (LEFT/RIGHT, 20-100%)
-- **Main Menu** - Return to startup menu (stops current session)
-- **Exit Pagergotchi** - Cleanly exit to Pager launcher
+The pause menu uses a two-column settings layout with action items below. Use UP/DOWN to navigate rows, LEFT/RIGHT to move between columns, and GREEN to cycle values or select actions.
 
 ### Themes
 
@@ -117,6 +104,77 @@ Press **RED** at any time during operation to open the pause menu. The agent con
 | Matrix | Synthwave |
 |--------|-----------|
 | ![Matrix Theme](screenshots/themes-matrix.png) | ![Synthwave Theme](screenshots/themes-synthwave.png) |
+
+#### Custom Themes
+
+Create `data/custom_themes.json` to add your own themes with hex color values. Custom themes appear after the built-in themes in the theme cycle. Copy the example to get started:
+
+```bash
+cp data/custom_themes.example.json data/custom_themes.json
+```
+
+A theme only requires 3 colors — `bg`, `text`, and `face`. All other keys are optional and will derive from these:
+
+```json
+{
+  "Fire": {
+    "bg": "#1a0500",
+    "text": "#ff6600",
+    "face": "#ff0000"
+  }
+}
+```
+
+For full control, you can specify all 15 keys:
+
+```json
+{
+  "Ocean": {
+    "bg": "#0a1628",
+    "text": "#4fc3f7",
+    "face": "#00e5ff",
+    "label": "#78909c",
+    "line": "#1a3a5c",
+    "status": "#4fc3f7",
+    "menu_title": "#00e5ff",
+    "menu_selected": "#4fc3f7",
+    "menu_unselected": "#78909c",
+    "menu_on": "#00e676",
+    "menu_off": "#ff1744",
+    "menu_dim": "#37474f",
+    "menu_accent": "#ffab40",
+    "menu_warning": "#ff6e40",
+    "menu_submenu": "#40c4ff"
+  }
+}
+```
+
+| Key | Used for | Default |
+|-----|----------|---------|
+| **`bg`** | Background color (required) | — |
+| **`text`** | Main text color (required) | — |
+| **`face`** | ASCII face color (required) | — |
+| `label` | Label text | `text` dimmed 60% |
+| `line` | Separator lines | `text` dimmed 40% |
+| `status` | Status bar text | `text` |
+| `menu_title` | Menu title text | `face` |
+| `menu_selected` | Highlighted menu item | `text` |
+| `menu_unselected` | Non-highlighted menu items | `label` |
+| `menu_on` | Toggle ON indicator | `face` |
+| `menu_off` | Toggle OFF indicator | `text` dimmed 30% |
+| `menu_dim` | Subtle/secondary menu text | `line` |
+| `menu_accent` | Accent highlights | `face` |
+| `menu_warning` | Warning text | `#ff6400` (orange) |
+| `menu_submenu` | Submenu title | `face` |
+
+Multiple themes can be defined in the same file. Invalid entries and malformed JSON are silently ignored. Built-in theme names cannot be overridden. See `data/custom_themes.example.json` for a working example.
+
+### Auto-Dim
+
+When enabled, the screen dims to the configured level after a period of inactivity. Any button press wakes the screen back to full brightness. The first press after dimming only wakes the screen and is not processed as a menu action.
+
+- **Auto Dim timeout**: Off, 30s, or 60s
+- **Dim Level**: 20%, 30%, 40%, 50%, or 60% brightness
 
 ## Deauth Scope
 
@@ -182,9 +240,11 @@ All settings and configuration stay within the payload directory:
 | File | Contents |
 |------|----------|
 | `config.conf` | User configuration |
-| `data/settings.json` | Runtime settings (theme, privacy, deauth, lists) |
+| `data/settings.json` | Runtime settings (theme, brightness, privacy, deauth, auto-dim, lists) |
 | `data/recovery.json` | Attack history for all networks |
 | `data/session.json` | Last session statistics |
+| `data/custom_themes.json` | User-defined themes in hex color format (optional) |
+| `data/.next_payload` | Temporary file for app handoff (auto-deleted) |
 
 ### Loot Directory (captured data)
 Captured data goes to the standard Pager loot location:
@@ -222,13 +282,13 @@ throttle_d = 0.9
 throttle_a = 0.4
 ```
 
-Runtime settings (theme, privacy, etc.) are saved to `data/settings.json`.
+Runtime settings (theme, brightness, privacy, auto-dim, etc.) are saved to `data/settings.json`.
 
 ## File Structure
 
 ### Repository Layout
 ```
-pineapple_pager_pagergotchi/
+pagergotchi/
 ├── README.md                # This file
 ├── screenshots/             # Documentation images
 └── payloads/
@@ -240,25 +300,30 @@ pineapple_pager_pagergotchi/
 ### Payload Contents
 ```
 pagergotchi/
-├── payload.sh           # Main entry point
-├── run_pagergotchi.py   # Python launcher
-├── config.conf          # User configuration
-├── data/                # Runtime data (auto-created)
-│   ├── settings.json    # Persistent settings
-│   └── recovery.json    # Attack history
-├── fonts/               # TTF fonts for display
-├── lib/                 # Native libraries & Python packages
-│   ├── libpagerctl.so   # Native display library
-│   └── pagerctl.py      # Python bindings
-├── bin/                 # Capture tools
-└── pwnagotchi_port/     # Main Python module
-    ├── main.py          # Entry point & button handling
-    ├── agent.py         # AI brain & attack logic
+├── payload.sh              # Main entry point (service management & handoff loop)
+├── run_pagergotchi.py      # Python launcher
+├── config.conf             # User configuration
+├── launch_pagergotchi.sh   # Direct launcher for handoff from other apps
+├── launch_bjorn.sh         # Bjorn launcher (handoff target)
+├── data/                   # Runtime data (auto-created)
+│   ├── settings.json       # Persistent settings
+│   ├── recovery.json       # Attack history
+│   ├── custom_themes.json  # User-defined themes (optional)
+│   ├── custom_themes.example.json  # Example custom themes
+│   └── .next_payload       # Handoff target (temporary)
+├── fonts/                  # TTF fonts for display
+├── lib/                    # Native libraries & Python packages
+│   ├── libpagerctl.so      # Native display/input library
+│   └── pagerctl.py         # Python bindings
+├── bin/                    # Capture tools
+└── pwnagotchi_port/        # Main Python module
+    ├── main.py             # Entry point, button monitor thread, main loop
+    ├── agent.py            # AI brain & attack logic
     └── ui/
-        ├── view.py      # Main display rendering
-        ├── menu.py      # Startup & pause menus
-        ├── components.py # UI elements
-        └── faces.py     # ASCII face definitions
+        ├── view.py         # Display rendering, pause menu, auto-dim
+        ├── menu.py         # Startup menu, themes, settings persistence
+        ├── components.py   # UI elements (Text, LabeledValue, Line)
+        └── faces.py        # ASCII face definitions
 ```
 
 ## Technical Details
@@ -267,10 +332,13 @@ pagergotchi/
 - Uses libpagerctl.so for native 480x222 RGB565 rendering
 - Double-buffered for flicker-free updates
 - TTF font rendering via stb_truetype
-- 2 FPS refresh for power saving (menu is instant-response)
+- 2 FPS refresh for main display (power saving)
+- Partial redraws for pause menu navigation (only changed items are redrawn)
 
 ### Input
 - Thread-safe event queue for reliable button detection
+- 16ms poll interval for responsive input
+- Stale event flushing after menu draws to prevent buffered keypress issues
 - Non-blocking menu allows background operation
 - Debounced input with edge detection
 
@@ -280,10 +348,16 @@ pagergotchi/
 - Per-AP throttling to avoid detection
 - Attack history prevents repeated attempts
 
+### Architecture
+- **Button monitor thread** - Polls hardware input at 16ms, handles menu navigation
+- **Refresh thread** - Redraws main display at 2 FPS, skips when menu is active
+- **Uptime thread** - Updates uptime counter every second
+- **Main loop** - Runs recon/attack epochs, checks for exit/menu signals
+
 ## Requirements
 
 - Hak5 WiFi Pineapple Pager
-- Python3 (auto-installed if missing)
+- Python3 with ctypes (auto-installed if missing)
 - Monitor mode capable WiFi adapter (built-in wlan1)
 
 ## Credits

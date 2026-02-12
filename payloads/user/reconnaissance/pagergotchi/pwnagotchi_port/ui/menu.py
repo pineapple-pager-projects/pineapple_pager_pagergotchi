@@ -127,6 +127,84 @@ MENU_THEMES = {
     },
 }
 
+
+def _hex_to_color(hex_str):
+    """Convert '#RRGGBB' hex string to Pager color int."""
+    hex_str = hex_str.lstrip('#')
+    r = int(hex_str[0:2], 16)
+    g = int(hex_str[2:4], 16)
+    b = int(hex_str[4:6], 16)
+    return Pager.rgb(r, g, b)
+
+
+def _dim_hex(hex_str, factor=0.4):
+    """Darken a hex color by factor (0.0=black, 1.0=unchanged)."""
+    hex_str = hex_str.lstrip('#')
+    r = int(int(hex_str[0:2], 16) * factor)
+    g = int(int(hex_str[2:4], 16) * factor)
+    b = int(int(hex_str[4:6], 16) * factor)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def load_custom_themes():
+    """Load custom themes from data/custom_themes.json and merge into theme dicts."""
+    themes_file = os.path.join(DATA_DIR, 'custom_themes.json')
+    if not os.path.exists(themes_file):
+        return
+    try:
+        with open(themes_file, 'r') as f:
+            custom = json.load(f)
+    except Exception:
+        return
+
+    for name, colors in custom.items():
+        if not isinstance(colors, dict):
+            continue
+        # Skip if missing required keys
+        if not all(k in colors for k in ('bg', 'text', 'face')):
+            continue
+        # Skip if would override a built-in theme
+        if name in VIEW_THEMES:
+            continue
+
+        # Fill view defaults
+        bg = colors['bg']
+        text = colors['text']
+        face = colors['face']
+        label = colors.get('label', _dim_hex(text, 0.6))
+        line = colors.get('line', _dim_hex(text))
+        status = colors.get('status', text)
+
+        VIEW_THEMES[name] = {
+            'bg': _hex_to_color(bg),
+            'text': _hex_to_color(text),
+            'face': _hex_to_color(face),
+            'label': _hex_to_color(label),
+            'line': _hex_to_color(line),
+            'status': _hex_to_color(status),
+        }
+
+        # Fill menu defaults
+        MENU_THEMES[name] = {
+            'bg': _hex_to_color(bg),
+            'title': _hex_to_color(colors.get('menu_title', face)),
+            'selected': _hex_to_color(colors.get('menu_selected', text)),
+            'unselected': _hex_to_color(colors.get('menu_unselected', label)),
+            'on': _hex_to_color(colors.get('menu_on', face)),
+            'off': _hex_to_color(colors.get('menu_off', _dim_hex(text, 0.3))),
+            'dim': _hex_to_color(colors.get('menu_dim', line)),
+            'accent': _hex_to_color(colors.get('menu_accent', face)),
+            'warning': _hex_to_color(colors.get('menu_warning', '#ff6400')),
+            'submenu': _hex_to_color(colors.get('menu_submenu', face)),
+        }
+
+        THEME_NAMES.append(name)
+
+
+# Load custom themes at module import
+load_custom_themes()
+
+
 def get_current_theme_name():
     """Get current theme name from settings"""
     settings = load_settings()
@@ -953,6 +1031,8 @@ def load_settings():
         'log_aps_enabled': False,
         'theme': 'Default',  # Theme name: Default, Cyberpunk, Matrix, Synthwave
         'brightness': 100,  # Screen brightness percentage (20-100)
+        'auto_dim': 0,  # Auto-dim timeout: 0=Off, 30/60 = seconds
+        'auto_dim_level': 20,  # Brightness % when dimmed: 10=off, 20, or 40
     }
     try:
         if os.path.exists(SETTINGS_FILE):
