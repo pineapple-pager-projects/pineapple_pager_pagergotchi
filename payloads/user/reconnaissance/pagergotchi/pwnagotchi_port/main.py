@@ -47,7 +47,7 @@ def _button_monitor_thread(display):
             # Consume events from the thread-safe queue
             event = display.get_input_event()
             if not event:
-                time.sleep(0.02)
+                time.sleep(0.016)
                 continue
 
             button, event_type, timestamp = event
@@ -55,6 +55,11 @@ def _button_monitor_thread(display):
             # Only react to press events
             if event_type != Pager.EVENT_PRESS:
                 continue
+
+            # Reset auto-dim timer; if screen was dimmed, consume this press
+            view = _agent_ref._view if _agent_ref and hasattr(_agent_ref, '_view') else None
+            if view and view.reset_activity():
+                continue  # Screen was dimmed, just wake up without processing button
 
             # Check if menu is active
             in_menu = _agent_ref and getattr(_agent_ref, '_menu_active', False)
@@ -64,15 +69,19 @@ def _button_monitor_thread(display):
                 view = _agent_ref._view if _agent_ref else None
                 if view and hasattr(view, 'handle_menu_input'):
                     result = view.handle_menu_input(button)
+                    # Flush stale events that buffered during menu draw
+                    display.poll_input()
+                    display.clear_input_events()
                     if result == 'exit':
                         _exit_requested = True
                         if _agent_ref:
                             _agent_ref._exit_requested = True
-                    elif result == 'main_menu':
-                        # Return to main menu (not full exit)
+                    elif result in ('main_menu', 'launch'):
+                        # Return to main menu or launch another payload
                         # Keep _menu_active = True so pause menu stays visible until loop exits
                         if _agent_ref:
                             _agent_ref._return_to_menu = True
+                            _agent_ref._return_target = result
                     elif result == 'resume':
                         if _agent_ref:
                             _agent_ref._menu_active = False
@@ -85,12 +94,15 @@ def _button_monitor_thread(display):
                         # Initialize menu state on view
                         if hasattr(_agent_ref, '_view') and _agent_ref._view:
                             _agent_ref._view.init_pause_menu(_agent_ref)
+                            # Flush stale events from menu init draw
+                            display.poll_input()
+                            display.clear_input_events()
 
-            time.sleep(0.02)
+            # No sleep after processing — go right back to polling
 
         except Exception as e:
             logging.debug("[BUTTON] Event error: %s", e)
-            time.sleep(0.02)
+            time.sleep(0.016)
 
     logging.info("[BUTTON] Monitor thread exiting")
 
@@ -153,6 +165,7 @@ def do_auto_mode(agent):
     agent.mode = 'auto'
     agent._exit_requested = False  # Initialize exit flag on agent
     agent._return_to_menu = False  # Return to startup menu flag
+    agent._return_target = 'main_menu'  # Where to go: 'main_menu' or 'bjorn'
     agent._menu_active = False  # Menu overlay state
     _agent_ref = agent  # Store reference for button thread
 
@@ -228,8 +241,9 @@ def do_auto_mode(agent):
                 logging.exception("main loop exception (%s)", e)
 
     if should_return_to_menu():
-        logging.info("[LOOP] Return to main menu requested")
-        return 'main_menu'
+        target = getattr(_agent_ref, '_return_target', 'main_menu') if _agent_ref else 'main_menu'
+        logging.info("[LOOP] Return requested, target=%s", target)
+        return target
     logging.info("[LOOP] Exit requested, leaving main loop")
     return 'exit'
 
@@ -409,7 +423,11 @@ def main():
             view.on_shutdown()
             view.cleanup()
 
-        # Check if we should return to main menu or exit
+        # Check result
+        if result == 'launch':
+            logging.info("Exiting with code 42 to launch next payload")
+            return 42
+
         if result != 'main_menu':
             break
 

@@ -251,6 +251,10 @@ class Pager:
         _lib.pager_get_brightness.restype = c_int
         _lib.pager_get_max_brightness.argtypes = []
         _lib.pager_get_max_brightness.restype = c_int
+        _lib.pager_screen_off.argtypes = []
+        _lib.pager_screen_off.restype = c_int
+        _lib.pager_screen_on.argtypes = []
+        _lib.pager_screen_on.restype = c_int
 
         # Image support
         _lib.pager_load_image.argtypes = [c_char_p]
@@ -573,6 +577,18 @@ class Pager:
         Returns -1 if backlight control not available.
         """
         return _lib.pager_get_max_brightness()
+
+    def screen_off(self):
+        """Turn screen off (sets brightness to 0%).
+        Returns 0 on success, -1 if backlight control not available.
+        """
+        return _lib.pager_screen_off()
+
+    def screen_on(self):
+        """Turn screen on (sets brightness to 80%).
+        Returns 0 on success, -1 if backlight control not available.
+        """
+        return _lib.pager_screen_on()
 
     # Image support (JPG, PNG, BMP, GIF)
     def load_image(self, filepath):

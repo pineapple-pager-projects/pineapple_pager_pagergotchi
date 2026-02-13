@@ -9,12 +9,56 @@
 # Payload directory (standard Pager installation path)
 PAYLOAD_DIR="/root/payloads/user/reconnaissance/pagergotchi"
 DATA_DIR="$PAYLOAD_DIR/data"
-LOOT_DIR="/root/loot/handshakes/pagergotchi"
 
 cd "$PAYLOAD_DIR" || {
     LOG "red" "ERROR: $PAYLOAD_DIR not found"
     exit 1
 }
+
+#
+# Find and setup pagerctl dependencies (libpagerctl.so + pagerctl.py)
+# Check bundled lib/ first, then PAGERCTL utilities dir
+#
+PAGERCTL_FOUND=false
+PAGERCTL_SEARCH_PATHS=(
+    "$PAYLOAD_DIR/lib"
+    "/mmc/root/payloads/user/utilities/PAGERCTL"
+)
+
+for dir in "${PAGERCTL_SEARCH_PATHS[@]}"; do
+    if [ -f "$dir/libpagerctl.so" ] && [ -f "$dir/pagerctl.py" ]; then
+        PAGERCTL_DIR="$dir"
+        PAGERCTL_FOUND=true
+        break
+    fi
+done
+
+if [ "$PAGERCTL_FOUND" = false ]; then
+    LOG ""
+    LOG "red" "=== MISSING DEPENDENCY ==="
+    LOG ""
+    LOG "red" "libpagerctl.so and pagerctl.py not found!"
+    LOG ""
+    LOG "Searched:"
+    for dir in "${PAGERCTL_SEARCH_PATHS[@]}"; do
+        LOG "  $dir"
+    done
+    LOG ""
+    LOG "Install PAGERCTL payload or copy files to:"
+    LOG "  $PAYLOAD_DIR/lib/"
+    LOG ""
+    LOG "Press any button to exit..."
+    WAIT_FOR_INPUT >/dev/null 2>&1
+    exit 1
+fi
+
+# If pagerctl files aren't in our lib dir, copy them there
+if [ "$PAGERCTL_DIR" != "$PAYLOAD_DIR/lib" ]; then
+    mkdir -p "$PAYLOAD_DIR/lib" 2>/dev/null
+    cp "$PAGERCTL_DIR/libpagerctl.so" "$PAYLOAD_DIR/lib/" 2>/dev/null
+    cp "$PAGERCTL_DIR/pagerctl.py" "$PAYLOAD_DIR/lib/" 2>/dev/null
+    LOG "green" "Copied pagerctl from $PAGERCTL_DIR"
+fi
 
 #
 # Setup local paths for bundled binaries and libraries
@@ -96,8 +140,7 @@ fi
 # Setup
 #
 
-# Create directories
-mkdir -p "$LOOT_DIR" 2>/dev/null
+# Create data directory
 mkdir -p "$DATA_DIR" 2>/dev/null
 
 # Setup monitor mode interface
@@ -232,23 +275,43 @@ fi
 
 sleep 0.5
 
-# Run Pagergotchi using proper pwnagotchi port
-# Uses libpagerctl.so for native Pager display
-cd "$PAYLOAD_DIR"
-python3 run_pagergotchi.py
+# Payload loop — Pagergotchi can hand off to other apps via exit code 42
+# Python writes the target launch script path to data/.next_payload
+# No pineapplepager restart needed between switches
+NEXT_PAYLOAD_FILE="$DATA_DIR/.next_payload"
 
-# Cleanup
-killall hcxdumptool 2>/dev/null
+while true; do
+    cd "$PAYLOAD_DIR"
+    python3 run_pagergotchi.py
+    EXIT_CODE=$?
 
-# Kill our pineapd and restart the service
-if [ -n "$PINEAPD_PID" ]; then
-    kill $PINEAPD_PID 2>/dev/null
-fi
-killall pineapd 2>/dev/null
+    # Cleanup pagergotchi processes
+    killall hcxdumptool 2>/dev/null
+    if [ -n "$PINEAPD_PID" ]; then
+        kill $PINEAPD_PID 2>/dev/null
+        PINEAPD_PID=""
+    fi
+    killall pineapd 2>/dev/null
+
+    # Exit code 42 = hand off to another payload
+    if [ "$EXIT_CODE" -eq 42 ] && [ -f "$NEXT_PAYLOAD_FILE" ]; then
+        NEXT_SCRIPT=$(cat "$NEXT_PAYLOAD_FILE")
+        rm -f "$NEXT_PAYLOAD_FILE"
+
+        if [ -f "$NEXT_SCRIPT" ]; then
+            bash "$NEXT_SCRIPT"
+            # Only loop back to pagergotchi if launched app exits 42
+            [ $? -eq 42 ] && continue
+        fi
+    fi
+
+    break
+done
+
 sleep 1
-/etc/init.d/pineapd start 2>/dev/null &
 
-# Restore services
+# Restore services on final exit
+/etc/init.d/pineapd start 2>/dev/null &
 /etc/init.d/php8-fpm start 2>/dev/null &
 /etc/init.d/nginx start 2>/dev/null &
 /etc/init.d/bluetoothd start 2>/dev/null &
