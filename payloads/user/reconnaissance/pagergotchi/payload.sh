@@ -1,5 +1,5 @@
 #!/bin/bash
-# Title: Pagergotchi
+# Title: PagerGotchi
 # Description: Pwnagotchi for WiFi Pineapple Pager - Automated WiFi handshake capture with personality
 # Author: brAinphreAk
 # Version: 2.0
@@ -87,9 +87,9 @@ if [ "$NEED_PYTHON" = true ] || [ "$NEED_CTYPES" = true ]; then
     LOG "red" "=== MISSING REQUIREMENT ==="
     LOG ""
     if [ "$NEED_PYTHON" = true ]; then
-        LOG "Python3 is required to run Pagergotchi."
+        LOG "Python3 is required to run PagerGotchi."
     else
-        LOG "Python3-ctypes is required to run Pagergotchi."
+        LOG "Python3-ctypes is required to run PagerGotchi."
     fi
     LOG "All other dependencies are bundled."
     LOG ""
@@ -213,7 +213,7 @@ done
 
 # Now do setup after GREEN button pressed
 LOG ""
-SPINNER_ID=$(START_SPINNER "Setting up Pagergotchi...")
+SPINNER_ID=$(START_SPINNER "Setting up PagerGotchi...")
 
 if ! setup_monitor_mode; then
     STOP_SPINNER "$SPINNER_ID" 2>/dev/null
@@ -275,7 +275,7 @@ fi
 
 sleep 0.5
 
-# Payload loop — Pagergotchi can hand off to other apps via exit code 42
+# Payload loop — PagerGotchi can hand off to other apps via exit code 42
 # Python writes the target launch script path to data/.next_payload
 # No pineapplepager restart needed between switches
 NEXT_PAYLOAD_FILE="$DATA_DIR/.next_payload"
