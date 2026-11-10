@@ -76,8 +76,8 @@ def _button_monitor_thread(display):
                         _exit_requested = True
                         if _agent_ref:
                             _agent_ref._exit_requested = True
-                    elif result in ('main_menu', 'launch'):
-                        # Return to main menu or launch another payload
+                    elif result == 'main_menu':
+                        # Return to main menu
                         # Keep _menu_active = True so pause menu stays visible until loop exits
                         if _agent_ref:
                             _agent_ref._return_to_menu = True
@@ -269,9 +269,11 @@ def load_config(config_path=None):
             # Attacks
             'associate': True,
             'deauth': True,
-            # Throttling - ORIGINAL VALUES from defaults.toml
-            'throttle_a': 0.4,
-            'throttle_d': 0.9,
+            # Throttling - also the on-screen dwell time for assoc/deauth
+            # messages; raised from pwnagotchi's e-ink defaults (0.4/0.9) so
+            # text is readable on the pager's fast LCD.
+            'throttle_a': 1.5,
+            'throttle_d': 1.5,
             # Limits
             'ap_ttl': 120,
             'sta_ttl': 300,
@@ -331,8 +333,8 @@ def load_config(config_path=None):
                 config['personality']['deauth'] = cp.getboolean('deauth', 'enabled', fallback=True)
 
             if 'timing' in cp:
-                config['personality']['throttle_d'] = cp.getfloat('timing', 'throttle_d', fallback=0.9)
-                config['personality']['throttle_a'] = cp.getfloat('timing', 'throttle_a', fallback=0.4)
+                config['personality']['throttle_d'] = cp.getfloat('timing', 'throttle_d', fallback=1.5)
+                config['personality']['throttle_a'] = cp.getfloat('timing', 'throttle_a', fallback=1.5)
 
             logging.info("Loaded config from %s", config_path)
         except Exception as e:
@@ -424,10 +426,6 @@ def main():
             view.cleanup()
 
         # Check result
-        if result == 'launch':
-            logging.info("Exiting with code 42 to launch next payload")
-            return 42
-
         if result != 'main_menu':
             break
 

@@ -702,6 +702,12 @@ class Agent(Client, Automata, AsyncAdvertiser):
             logging.debug("recon is stale, skipping deauth(%s)", sta['mac'])
             return
 
+        # Already have a full handshake for this AP? One WPA handshake yields the
+        # PSK for the whole AP, so deauthing its other clients is redundant noise.
+        if self._has_handshake(ap['mac']):
+            logging.debug("already have handshake for %s, skipping deauth", ap['mac'])
+            return
+
         if throttle == -1:
             throttle = self._config['personality'].get('throttle_d', 0.9)
 

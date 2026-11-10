@@ -401,17 +401,31 @@ class PineAPBackend:
             time.sleep(2)  # Check every 2 seconds
 
     def _check_new_handshakes(self):
-        """Check for newly captured handshakes"""
-        patterns = [
-            os.path.join(self.handshakes_dir, '*.22000'),
-            os.path.join(self.handshakes_dir, '*_handshake.22000'),
-        ]
+        """Check for newly captured handshakes.
 
-        for pattern in patterns:
-            for filepath in glob(pattern):
-                if filepath not in self._known_handshakes:
-                    self._known_handshakes.add(filepath)
-                    self._process_new_handshake(filepath)
+        Only FULL handshakes count as 'captured' (they mark an AP as done so we
+        stop targeting it). PARTIAL handshakes are kept on disk and we learn the
+        ESSID from them, but they do NOT mark the AP done — we want to keep
+        attacking partial-only APs so a full 4-way handshake can still complete.
+        """
+        for filepath in glob(os.path.join(self.handshakes_dir, '*.22000')):
+            if filepath in self._known_handshakes:
+                continue
+            self._known_handshakes.add(filepath)
+            if '_partial' in os.path.basename(filepath).lower():
+                self._process_partial_handshake(filepath)
+            else:
+                self._process_new_handshake(filepath)
+
+    def _process_partial_handshake(self, filepath):
+        """Record a partial capture: learn its ESSID for display, but do NOT
+        register it as a handshake (so the AP stays in the attack rotation)."""
+        filename = os.path.basename(filepath)
+        ap_mac_from_file, essid = self._extract_essid_from_22000(filepath)
+        if ap_mac_from_file and essid:
+            mac_formatted = ':'.join(ap_mac_from_file[i:i+2] for i in range(0, 12, 2))
+            self._learned_essids[mac_formatted] = essid
+        logging.info(f"[PineAP] Partial handshake (kept, still targeting AP): {filename}")
 
     def _process_new_handshake(self, filepath):
         """Process a newly captured handshake"""

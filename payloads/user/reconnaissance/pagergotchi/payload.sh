@@ -4,7 +4,7 @@
 # Author: brAinphreAk
 # Version: 2.0
 # Category: Reconnaissance
-# Library: libpagerctl.so (pagerctl)
+# Library: pagerctl.py (pure-Python, bundled in lib/)
 
 # Payload directory (standard Pager installation path)
 PAYLOAD_DIR="/root/payloads/user/reconnaissance/pagergotchi"
@@ -16,53 +16,27 @@ cd "$PAYLOAD_DIR" || {
 }
 
 #
-# Find and setup pagerctl dependencies (libpagerctl.so + pagerctl.py)
-# Check bundled lib/ first, then PAGERCTL utilities dir
+# pagerctl.py (pure-Python graphics/input library) is bundled in lib/.
+# No shared library (libpagerctl.so) or python3-ctypes is required anymore.
 #
-PAGERCTL_FOUND=false
-PAGERCTL_SEARCH_PATHS=(
-    "$PAYLOAD_DIR/lib"
-    "/mmc/root/payloads/user/utilities/PAGERCTL"
-)
-
-for dir in "${PAGERCTL_SEARCH_PATHS[@]}"; do
-    if [ -f "$dir/libpagerctl.so" ] && [ -f "$dir/pagerctl.py" ]; then
-        PAGERCTL_DIR="$dir"
-        PAGERCTL_FOUND=true
-        break
-    fi
-done
-
-if [ "$PAGERCTL_FOUND" = false ]; then
+if [ ! -f "$PAYLOAD_DIR/lib/pagerctl.py" ]; then
     LOG ""
     LOG "red" "=== MISSING DEPENDENCY ==="
     LOG ""
-    LOG "red" "libpagerctl.so and pagerctl.py not found!"
+    LOG "red" "lib/pagerctl.py not found!"
     LOG ""
-    LOG "Searched:"
-    for dir in "${PAGERCTL_SEARCH_PATHS[@]}"; do
-        LOG "  $dir"
-    done
-    LOG ""
-    LOG "Install PAGERCTL payload or copy files to:"
-    LOG "  $PAYLOAD_DIR/lib/"
+    LOG "Reinstall PagerGotchi so that:"
+    LOG "  $PAYLOAD_DIR/lib/pagerctl.py"
+    LOG "is present."
     LOG ""
     LOG "Press any button to exit..."
     WAIT_FOR_INPUT >/dev/null 2>&1
     exit 1
 fi
 
-# If pagerctl files aren't in our lib dir, copy them there
-if [ "$PAGERCTL_DIR" != "$PAYLOAD_DIR/lib" ]; then
-    mkdir -p "$PAYLOAD_DIR/lib" 2>/dev/null
-    cp "$PAGERCTL_DIR/libpagerctl.so" "$PAYLOAD_DIR/lib/" 2>/dev/null
-    cp "$PAGERCTL_DIR/pagerctl.py" "$PAYLOAD_DIR/lib/" 2>/dev/null
-    LOG "green" "Copied pagerctl from $PAGERCTL_DIR"
-fi
-
 #
-# Setup local paths for bundled binaries and libraries
-# Uses libpagerctl.so for display/input handling
+# Setup local paths for bundled scripts and libraries
+# Display/input handled by pure-Python lib/pagerctl.py (framebuffer takeover)
 # MMC paths needed when python3 installed with opkg -d mmc
 #
 export PATH="/mmc/usr/bin:$PAYLOAD_DIR/bin:$PATH"
@@ -70,27 +44,13 @@ export PYTHONPATH="$PAYLOAD_DIR/lib:$PAYLOAD_DIR:$PYTHONPATH"
 export LD_LIBRARY_PATH="/mmc/usr/lib:$PAYLOAD_DIR/lib:$LD_LIBRARY_PATH"
 
 #
-# Check for Python3 and python3-ctypes - required system dependencies
+# Check for Python3 - the only required system dependency
 #
-NEED_PYTHON=false
-NEED_CTYPES=false
-
 if ! command -v python3 >/dev/null 2>&1; then
-    NEED_PYTHON=true
-    NEED_CTYPES=true
-elif ! python3 -c "import ctypes" 2>/dev/null; then
-    NEED_CTYPES=true
-fi
-
-if [ "$NEED_PYTHON" = true ] || [ "$NEED_CTYPES" = true ]; then
     LOG ""
     LOG "red" "=== MISSING REQUIREMENT ==="
     LOG ""
-    if [ "$NEED_PYTHON" = true ]; then
-        LOG "Python3 is required to run PagerGotchi."
-    else
-        LOG "Python3-ctypes is required to run PagerGotchi."
-    fi
+    LOG "Python3 is required to run PagerGotchi."
     LOG "All other dependencies are bundled."
     LOG ""
     LOG "green" "GREEN = Install dependencies (requires internet)"
@@ -105,11 +65,11 @@ if [ "$NEED_PYTHON" = true ] || [ "$NEED_CTYPES" = true ]; then
                 LOG "Updating package lists..."
                 opkg update 2>&1 | while IFS= read -r line; do LOG "  $line"; done
                 LOG ""
-                LOG "Installing Python3 + ctypes to MMC..."
-                opkg -d mmc install python3 python3-ctypes 2>&1 | while IFS= read -r line; do LOG "  $line"; done
+                LOG "Installing Python3 to MMC..."
+                opkg -d mmc install python3 2>&1 | while IFS= read -r line; do LOG "  $line"; done
                 LOG ""
                 # Verify installation succeeded
-                if command -v python3 >/dev/null 2>&1 && python3 -c "import ctypes" 2>/dev/null; then
+                if command -v python3 >/dev/null 2>&1; then
                     LOG "green" "Python3 installed successfully!"
                     sleep 1
                 else
@@ -224,16 +184,21 @@ if ! setup_monitor_mode; then
     SPINNER_ID=$(START_SPINNER "Starting anyway...")
 fi
 
-# Stop services to free framebuffer (but keep pineapd running)
+# Free some resources while we run (the display itself is handled by
+# UI_TAKEOVER below, NOT by stopping pineapplepager — the pager UI daemon
+# stays running and simply yields the framebuffer).
 /etc/init.d/php8-fpm stop 2>/dev/null
 /etc/init.d/nginx stop 2>/dev/null
 /etc/init.d/bluetoothd stop 2>/dev/null
-/etc/init.d/pineapplepager stop 2>/dev/null
 
-# Stop pineapd service and start our own with handshakes enabled
+# Hand the radio from the default pineapd to our own (handshakes enabled).
+# Delete it from procd too, so it is not respawned while ours runs
+# (pineapplepager's own stop hook normally does this; we must do it since
+# we no longer stop pineapplepager).
 STOP_SPINNER "$SPINNER_ID" 2>/dev/null
 LOG "Starting pineapd with handshake capture..."
 /etc/init.d/pineapd stop 2>/dev/null
+ubus call service delete '{"name":"pineapd"}' 2>/dev/null
 killall pineapd 2>/dev/null
 sleep 1
 
@@ -275,9 +240,20 @@ fi
 
 sleep 0.5
 
+# ------------------------------------------------------------------
+# Hold the display for the WHOLE session via UI_TAKEOVER (the firmware
+# DuckyScript command), not by stopping the pineapplepager service.
+# The pager UI daemon keeps running and yields /dev/fb0; on UI_RELEASE it
+# simply redraws its home screen — no service cold-start / "restart".
+# PAGERCTL_EXTERNAL_TAKEOVER tells lib/pagerctl.py to skip its own
+# per-process takeover so there is no flicker between loop iterations.
+# ------------------------------------------------------------------
+export PAGERCTL_EXTERNAL_TAKEOVER=1
+UI_TAKEOVER
+trap 'UI_RELEASE 2>/dev/null' EXIT INT TERM
+
 # Payload loop — PagerGotchi can hand off to other apps via exit code 42
 # Python writes the target launch script path to data/.next_payload
-# No pineapplepager restart needed between switches
 NEXT_PAYLOAD_FILE="$DATA_DIR/.next_payload"
 
 while true; do
@@ -308,11 +284,16 @@ while true; do
     break
 done
 
+# Release the display back to the still-running pager UI daemon (also covered
+# by the trap, but do it explicitly before restarting services).
+UI_RELEASE 2>/dev/null
+
 sleep 1
 
-# Restore services on final exit
+# Restore services on final exit. pineapplepager was never stopped, so it is
+# NOT restarted here (that cold-start was the "pager restarted" on exit).
+# Re-registering pineapd via its init script restores the default radio daemon.
 /etc/init.d/pineapd start 2>/dev/null &
 /etc/init.d/php8-fpm start 2>/dev/null &
 /etc/init.d/nginx start 2>/dev/null &
 /etc/init.d/bluetoothd start 2>/dev/null &
-/etc/init.d/pineapplepager start 2>/dev/null &

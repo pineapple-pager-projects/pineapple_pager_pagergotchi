@@ -444,8 +444,10 @@ class StartupMenu:
         theme = get_menu_theme()
         self.gfx.clear(theme['bg'])
 
-        # Title using TTF font - larger and centered
-        self.gfx.draw_ttf_centered(0, "PagerGotchi", theme['title'], FONT_LOVEDAYS, 62.0)
+        # Title using TTF font - larger and centered.
+        # Negative y trims the LoveDays font's large internal top padding so the
+        # title sits near the top edge and clears the first menu item.
+        self.gfx.draw_ttf_centered(-18, "PagerGotchi", theme['title'], FONT_LOVEDAYS, 62.0)
 
         # Menu options - centered vertically
         y = 68
@@ -1030,10 +1032,8 @@ def load_settings():
         'wigle_enabled': False,
         'log_aps_enabled': False,
         'theme': 'Default',  # Theme name: Default, Cyberpunk, Matrix, Synthwave
-        'brightness': 100,  # Screen brightness percentage (20-100)
-        'auto_dim': 0,  # Auto-dim timeout: 0=Off, 30/60 = seconds
-        'auto_dim_level': 20,  # Brightness % when dimmed: 10=off, 20, or 40
     }
+    # Note: screen brightness/dimming is owned by pagerOS, not Pagergotchi.
     try:
         if os.path.exists(SETTINGS_FILE):
             with open(SETTINGS_FILE, 'r') as f:

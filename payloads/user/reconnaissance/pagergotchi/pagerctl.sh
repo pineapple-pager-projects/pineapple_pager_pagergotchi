@@ -4,7 +4,7 @@
 # Author: brAinphreAk
 # Version: 2.0
 # Category: Reconnaissance
-# Library: libpagerctl.so (pagerctl)
+# Library: pagerctl.py (pure-Python, bundled in lib/)
 #
 # Pagerctl-native launcher. pagerctl_home has already torn the pager
 # down and stopped pineapplepager — we skip the duckyscript splash
@@ -21,7 +21,7 @@ export PYTHONPATH="$PAYLOAD_DIR/lib:$PAYLOAD_DIR:$PYTHONPATH"
 export LD_LIBRARY_PATH="/mmc/usr/lib:$PAYLOAD_DIR/lib:$LD_LIBRARY_PATH"
 
 command -v python3 >/dev/null 2>&1 || exit 1
-python3 -c "import ctypes" 2>/dev/null || exit 1
+[ ! -f "$PAYLOAD_DIR/lib/pagerctl.py" ] && exit 1
 [ ! -d "$PAYLOAD_DIR/pwnagotchi_port" ] && exit 1
 
 mkdir -p "$DATA_DIR" 2>/dev/null

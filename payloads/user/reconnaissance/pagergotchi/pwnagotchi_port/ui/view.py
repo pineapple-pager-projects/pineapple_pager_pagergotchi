@@ -48,44 +48,6 @@ LABEL_TTF_SIZE = 22.0  # Labels like CH, APS, UPTIME, BAT, etc.
 # Padding between text and lines (in pixels)
 LINE_PADDING = 5
 
-# Auto-dim settings
-AUTO_DIM_OPTIONS = [0, 30, 60]  # 0=Off, others are seconds
-AUTO_DIM_LEVELS = [20, 30, 40, 50, 60]  # Brightness % when dimmed
-
-
-def discover_launchers():
-    """Scan for launch_*.sh files in payload directory.
-    Returns list of (title, path) for each launcher found, excluding launch_pagergotchi.sh."""
-    launchers = []
-    try:
-        for name in sorted(os.listdir(_payload_dir)):
-            if not name.startswith('launch_') or not name.endswith('.sh'):
-                continue
-            if name == 'launch_pagergotchi.sh':
-                continue
-            path = os.path.join(_payload_dir, name)
-            # Extract title and requirements from header comments
-            title = name.replace('launch_', '').replace('.sh', '').capitalize()
-            requires = None
-            try:
-                with open(path, 'r') as f:
-                    for line in f:
-                        if line.startswith('# Title:'):
-                            title = line.split(':', 1)[1].strip()
-                        elif line.startswith('# Requires:'):
-                            requires = line.split(':', 1)[1].strip()
-                        elif not line.startswith('#') and line.strip():
-                            break
-            except Exception:
-                pass
-            # Skip if required path doesn't exist
-            if requires and not os.path.exists(requires):
-                continue
-            launchers.append((title, path))
-    except Exception as e:
-        logging.debug("Launcher discovery error: %s", e)
-    return launchers
-
 # Base layout - line positions calculated dynamically based on font height
 LAYOUT = {
     'width': 480,
@@ -253,15 +215,7 @@ class View:
 
         plugins.on('ui_setup', self)
 
-        # Apply saved brightness setting
-        settings = load_settings()
-        brightness = settings.get('brightness', 100)
-        self._display.set_brightness(brightness)
-
-        # Auto-dim state
-        self._last_activity_time = time.time()
-        self._is_dimmed = False
-        self._dim_level = 20
+        # Note: screen brightness is owned by pagerOS; Pagergotchi does not set it.
 
         # Start refresh thread
         self._refresh_stop = False
@@ -281,26 +235,9 @@ class View:
         self._agent = agent
 
     def reset_activity(self):
-        """Reset activity timer. Returns True if screen was dimmed (caller should consume the button press)."""
-        self._last_activity_time = time.time()
-        if self._is_dimmed:
-            self._is_dimmed = False
-            settings = load_settings()
-            brightness = settings.get('brightness', 100)
-            self._display.set_brightness(brightness)
-            return True
+        """Kept for button-handler compatibility. Screen dimming/brightness is
+        owned by pagerOS, so there is nothing to wake and no press to consume."""
         return False
-
-    def _check_auto_dim(self):
-        """Dim screen if idle for auto_dim seconds (0=disabled)."""
-        if self._is_dimmed:
-            return
-        settings = load_settings()
-        timeout = settings.get('auto_dim', 0)
-        if timeout > 0 and time.time() - self._last_activity_time >= timeout:
-            self._is_dimmed = True
-            self._dim_level = settings.get('auto_dim_level', 20)
-            self._display.set_brightness(self._dim_level)
 
     def has_element(self, key):
         return self._state.has_element(key)
@@ -340,118 +277,95 @@ class View:
                     time.sleep(delay)
                     continue
 
-                self._check_auto_dim()
                 self.update()
             except Exception as e:
                 logging.warning(f"Display update error: {e}")
             time.sleep(delay)
 
+    # Pause-menu settings, one per row (single column)
+    _SETTINGS = ('theme', 'deauth', 'privacy')
+
     def init_pause_menu(self, agent):
         """Initialize pause menu state and draw immediately"""
         self._menu_row = 0
-        self._menu_col = 0
         self._menu_settings = load_settings()
-        self._available_launchers = discover_launchers()
-        self._launcher_idx = 0
         # Sync deauth from agent config
         if agent and hasattr(agent, '_config'):
             self._menu_settings['deauth_enabled'] = agent._config.get('personality', {}).get('deauth', True)
         # Draw immediately so menu appears without waiting for refresh thread
         self._draw_pause_menu()
 
+    def _num_settings(self):
+        return len(self._SETTINGS)
+
     def _get_bottom_items(self):
-        """Build list of bottom menu items (action label, return value).
-        Launchers are shown as a single toggle item (LEFT/RIGHT cycles)."""
-        items = [
+        """Bottom action items (label, return value)."""
+        return [
             ('Back to Pagergotchi', 'resume'),
             ('Exit to Main Menu', 'main_menu'),
+            ('Exit Pagergotchi', 'exit'),
         ]
-        launchers = getattr(self, '_available_launchers', [])
-        if launchers:
-            idx = getattr(self, '_launcher_idx', 0) % len(launchers)
-            title, path = launchers[idx]
-            items.append((f'Exit to {title}', ('launch', path)))
-        items.append(('Exit Pagergotchi', 'exit'))
-        return items
 
     def handle_menu_input(self, button):
         """Handle button input for pause menu. Returns action string or None.
 
-        Layout — rows 0-2 are two columns, rows 3+ are centered bottom items:
-          Row 0: [Theme, Brightness]
-          Row 1: [Deauth, Auto Dim]
-          Row 2: [Privacy, Dim Level]
-          Row 3+: Back / Main Menu / Launchers / Exit
+        Single-column layout:
+          Row 0: Theme    (LEFT/RIGHT/GREEN cycles)
+          Row 1: Deauth   (LEFT/RIGHT/GREEN toggles)
+          Row 2: Privacy  (LEFT/RIGHT/GREEN toggles)
+          Row 3+: Back to Pagergotchi / Exit to Main Menu / Exit Pagergotchi
+        RED resumes.
 
-        Uses partial redraws for navigation — only redraws changed items.
+        Uses partial redraws for navigation — only redraws changed rows.
         """
         if not hasattr(self, '_menu_row'):
             self._menu_row = 0
-            self._menu_col = 0
         if not hasattr(self, '_menu_settings'):
             self._menu_settings = load_settings()
 
+        n_set = self._num_settings()
         bottom_items = self._get_bottom_items()
-        total_rows = 3 + len(bottom_items)
-        old_row, old_col = self._menu_row, self._menu_col
+        total_rows = n_set + len(bottom_items)
+        old_row = self._menu_row
 
         if button == Pager.BTN_UP:
             self._menu_row = (self._menu_row - 1) % total_rows
-            self._partial_redraw_menu([(old_row, old_col), (self._menu_row, self._menu_col)])
+            self._partial_redraw_menu([old_row, self._menu_row])
         elif button == Pager.BTN_DOWN:
             self._menu_row = (self._menu_row + 1) % total_rows
-            self._partial_redraw_menu([(old_row, old_col), (self._menu_row, self._menu_col)])
-        elif button == Pager.BTN_LEFT:
-            if self._menu_row < 3 and self._menu_col != 0:
-                self._menu_col = 0
-                self._partial_redraw_menu([(old_row, 1), (self._menu_row, 0)])
-            elif self._menu_row >= 3:
-                launchers = getattr(self, '_available_launchers', [])
-                if len(launchers) > 1:
-                    idx = self._menu_row - 3
-                    bottom_items = self._get_bottom_items()
-                    if idx < len(bottom_items) and isinstance(bottom_items[idx][1], tuple) and bottom_items[idx][1][0] == 'launch':
-                        self._launcher_idx = (getattr(self, '_launcher_idx', 0) - 1) % len(launchers)
-                        self._partial_redraw_menu([(self._menu_row, 0)])
-        elif button == Pager.BTN_RIGHT:
-            if self._menu_row < 3 and self._menu_col != 1:
-                self._menu_col = 1
-                self._partial_redraw_menu([(old_row, 0), (self._menu_row, 1)])
-            elif self._menu_row >= 3:
-                launchers = getattr(self, '_available_launchers', [])
-                if len(launchers) > 1:
-                    idx = self._menu_row - 3
-                    bottom_items = self._get_bottom_items()
-                    if idx < len(bottom_items) and isinstance(bottom_items[idx][1], tuple) and bottom_items[idx][1][0] == 'launch':
-                        self._launcher_idx = (getattr(self, '_launcher_idx', 0) + 1) % len(launchers)
-                        self._partial_redraw_menu([(self._menu_row, 0)])
-        elif button == Pager.BTN_A:  # Green = Select / cycle value
-            row, col = self._menu_row, self._menu_col
-            if row < 3:
-                # Column settings — cycle forward on select
-                action = [(self._cycle_theme, self._adjust_brightness),
-                          (self._toggle_deauth, self._cycle_auto_dim),
-                          (self._toggle_privacy, self._cycle_dim_level)]
-                action[row][col](Pager.BTN_RIGHT)
-                if row == 0 and col == 0:  # Theme changed — colors change everywhere
+            self._partial_redraw_menu([old_row, self._menu_row])
+        elif button in (Pager.BTN_LEFT, Pager.BTN_RIGHT):
+            if self._menu_row < n_set:
+                self._change_setting(self._menu_row, button)
+                if self._menu_row == 0:   # Theme changed — colors change everywhere
                     self._draw_pause_menu()
                 else:
-                    self._partial_redraw_menu([(row, col)])
+                    self._partial_redraw_menu([self._menu_row])
+        elif button == Pager.BTN_A:   # Green = Select / cycle forward
+            if self._menu_row < n_set:
+                self._change_setting(self._menu_row, Pager.BTN_RIGHT)
+                if self._menu_row == 0:
+                    self._draw_pause_menu()
+                else:
+                    self._partial_redraw_menu([self._menu_row])
             else:
-                # Bottom action items
-                idx = row - 3
-                result = bottom_items[idx][1]
-                if isinstance(result, tuple) and result[0] == 'launch':
-                    self._write_next_payload(result[1])
-                    self._draw_returning_screen("Launching...")
-                    return 'launch'
+                result = bottom_items[self._menu_row - n_set][1]
                 if result == 'main_menu':
                     self._draw_returning_screen()
                 return result
-        elif button == Pager.BTN_B:  # Red = Resume
+        elif button == Pager.BTN_B:   # Red = Resume
             return 'resume'
 
         return None
+
+    def _change_setting(self, row, button):
+        key = self._SETTINGS[row]
+        if key == 'theme':
+            self._cycle_theme(button)
+        elif key == 'deauth':
+            self._toggle_deauth()
+        elif key == 'privacy':
+            self._toggle_privacy()
 
     def _cycle_theme(self, button):
         """Cycle through themes"""
@@ -479,90 +393,38 @@ class View:
         self._menu_settings['privacy_mode'] = not self._menu_settings['privacy_mode']
         save_settings(self._menu_settings)
 
-    def _adjust_brightness(self, button):
-        """Cycle screen brightness in 10% steps (20-100%, wraps around)"""
-        current = self._menu_settings.get('brightness', 100)
-        if button == Pager.BTN_RIGHT:
-            new_val = current + 10
-            if new_val > 100:
-                new_val = 20
-        else:
-            new_val = current - 10
-            if new_val < 20:
-                new_val = 100
+    def _get_menu_item_text(self, row):
+        """Get (label, value) for a settings row."""
+        key = self._SETTINGS[row]
+        if key == 'theme':
+            return ('Theme:', self._menu_settings.get('theme', 'Default'))
+        if key == 'deauth':
+            return ('Deauth:', 'ON' if self._menu_settings.get('deauth_enabled', True) else 'OFF')
+        if key == 'privacy':
+            return ('Privacy:', 'ON' if self._menu_settings.get('privacy_mode', False) else 'OFF')
+        return ('', '')
 
-        self._menu_settings['brightness'] = new_val
-        self._display.set_brightness(new_val)
-        save_settings(self._menu_settings)
-
-    def _cycle_auto_dim(self, button):
-        """Cycle auto-dim timeout: Off, 30s, 60s"""
-        current = self._menu_settings.get('auto_dim', 0)
-        try:
-            idx = AUTO_DIM_OPTIONS.index(current)
-        except ValueError:
-            idx = 0
-        if button == Pager.BTN_RIGHT:
-            idx = (idx + 1) % len(AUTO_DIM_OPTIONS)
-        else:
-            idx = (idx - 1) % len(AUTO_DIM_OPTIONS)
-        self._menu_settings['auto_dim'] = AUTO_DIM_OPTIONS[idx]
-        # Reset activity timer when changing the setting
-        self._last_activity_time = time.time()
-        self._is_dimmed = False
-        save_settings(self._menu_settings)
-
-    def _cycle_dim_level(self, button):
-        """Cycle dim brightness level: 20%, 40%"""
-        current = self._menu_settings.get('auto_dim_level', 20)
-        try:
-            idx = AUTO_DIM_LEVELS.index(current)
-        except ValueError:
-            idx = 0  # Default to 20%
-        if button == Pager.BTN_RIGHT:
-            idx = (idx + 1) % len(AUTO_DIM_LEVELS)
-        else:
-            idx = (idx - 1) % len(AUTO_DIM_LEVELS)
-        self._menu_settings['auto_dim_level'] = AUTO_DIM_LEVELS[idx]
-        save_settings(self._menu_settings)
-
-    def _get_menu_item_text(self, row, col):
-        """Get (label, value) for a column settings item at (row, col)."""
-        current_theme = self._menu_settings.get('theme', 'Default')
-        auto_dim_val = self._menu_settings.get('auto_dim', 0)
-        auto_dim_str = 'Off' if auto_dim_val == 0 else f'{auto_dim_val}s'
-        dim_level = self._menu_settings.get('auto_dim_level', 20)
-        dim_level_str = f'{dim_level}%'
-
-        items = [
-            [('Theme:', current_theme), ('Brightness:', f"{self._menu_settings.get('brightness', 100)}%")],
-            [('Deauth:', 'ON' if self._menu_settings.get('deauth_enabled', True) else 'OFF'), ('Auto Dim:', auto_dim_str)],
-            [('Privacy:', 'ON' if self._menu_settings.get('privacy_mode', False) else 'OFF'), ('Dim Level:', dim_level_str)],
-        ]
-        return items[row][col]
-
-    def _partial_redraw_menu(self, positions):
-        """Redraw only the specified menu positions. Much faster than full redraw."""
+    def _partial_redraw_menu(self, rows):
+        """Redraw only the specified menu rows. Much faster than full redraw."""
         theme = get_menu_theme()
-        col_x = [30, 260]
+        n_set = self._num_settings()
+        x = 30
         start_y = 48
         row_h = 26
         bottom_items = self._get_bottom_items()
-        bottom_y = start_y + 3 * row_h + 6
-        col_w = [col_x[1] - col_x[0], 480 - col_x[1]]
+        bottom_y = start_y + n_set * row_h + 6
 
-        for r, c in positions:
-            if r < 3:
-                # Column setting item
-                x = col_x[c]
+        for r in rows:
+            if r < n_set:
+                # Settings row
                 y = start_y + r * row_h
-                self._display.fill_rect(x, y, col_w[c], row_h, theme['bg'])
+                self._display.fill_rect(0, y, 480, row_h, theme['bg'])
 
-                label, value = self._get_menu_item_text(r, c)
-                is_sel = (self._menu_row == r and self._menu_col == c)
+                label, value = self._get_menu_item_text(r)
+                is_sel = (self._menu_row == r)
                 label_color = theme['selected'] if is_sel else theme['unselected']
 
-                if label in ('Theme:', 'Brightness:', 'Auto Dim:', 'Dim Level:'):
+                if label == 'Theme:':
                     value_color = theme['accent']
                 else:
                     value_color = theme['on'] if value == 'ON' else theme['off']
@@ -572,7 +434,7 @@ class View:
                 self._display.draw_ttf(x + label_w + 6, y, value, value_color, FONT_DEJAVU, TTF_MEDIUM)
             else:
                 # Bottom action item
-                idx = r - 3
+                idx = r - n_set
                 if idx < len(bottom_items):
                     y = bottom_y + idx * 22
                     self._display.fill_rect(0, y, 480, 22, theme['bg'])
@@ -588,75 +450,48 @@ class View:
         """Draw pause menu overlay — full redraw (used for init and theme changes)."""
         if not hasattr(self, '_menu_row'):
             self._menu_row = 0
-            self._menu_col = 0
         if not hasattr(self, '_menu_settings'):
             self._menu_settings = load_settings()
 
         theme = get_menu_theme()
-        row, col = self._menu_row, self._menu_col
+        n_set = self._num_settings()
 
         self._display.clear(theme['bg'])
 
         # Title
         self._display.draw_ttf_centered(10, "PAUSED", theme['warning'], FONT_DEJAVU, TTF_LARGE)
 
-        # --- Column settings (rows 0-2) ---
-        current_theme = self._menu_settings.get('theme', 'Default')
-        auto_dim_val = self._menu_settings.get('auto_dim', 0)
-        auto_dim_str = 'Off' if auto_dim_val == 0 else f'{auto_dim_val}s'
-        dim_level = self._menu_settings.get('auto_dim_level', 20)
-        dim_level_str = f'{dim_level}%'
-
-        # (left_label, left_value, right_label, right_value)
-        col_rows = [
-            ('Theme:', current_theme,
-             'Brightness:', f"{self._menu_settings.get('brightness', 100)}%"),
-            ('Deauth:', 'ON' if self._menu_settings.get('deauth_enabled', True) else 'OFF',
-             'Auto Dim:', auto_dim_str),
-            ('Privacy:', 'ON' if self._menu_settings.get('privacy_mode', False) else 'OFF',
-             'Dim Level:', dim_level_str),
-        ]
-
-        col_x = [30, 260]
+        # --- Settings rows (single column) ---
+        x = 30
         start_y = 48
         row_h = 26
 
-        for r, (ll, lv, rl, rv) in enumerate(col_rows):
+        for r in range(n_set):
             y = start_y + r * row_h
-            for c, (label, value) in enumerate([(ll, lv), (rl, rv)]):
-                x = col_x[c]
-                is_sel = (row == r and col == c)
-                label_color = theme['selected'] if is_sel else theme['unselected']
+            label, value = self._get_menu_item_text(r)
+            is_sel = (self._menu_row == r)
+            label_color = theme['selected'] if is_sel else theme['unselected']
 
-                if label in ('Theme:', 'Brightness:', 'Auto Dim:', 'Dim Level:'):
-                    value_color = theme['accent']
-                else:
-                    value_color = theme['on'] if value == 'ON' else theme['off']
+            if label == 'Theme:':
+                value_color = theme['accent']
+            else:
+                value_color = theme['on'] if value == 'ON' else theme['off']
 
-                label_w = self._display.ttf_width(label, FONT_DEJAVU, TTF_MEDIUM)
-                self._display.draw_ttf(x, y, label, label_color, FONT_DEJAVU, TTF_MEDIUM)
-                self._display.draw_ttf(x + label_w + 6, y, value, value_color, FONT_DEJAVU, TTF_MEDIUM)
+            label_w = self._display.ttf_width(label, FONT_DEJAVU, TTF_MEDIUM)
+            self._display.draw_ttf(x, y, label, label_color, FONT_DEJAVU, TTF_MEDIUM)
+            self._display.draw_ttf(x + label_w + 6, y, value, value_color, FONT_DEJAVU, TTF_MEDIUM)
 
-        # --- Bottom action items (rows 3+) ---
+        # --- Bottom action items ---
         bottom_items = self._get_bottom_items()
-        bottom_y = start_y + 3 * row_h + 6
+        bottom_y = start_y + n_set * row_h + 6
 
         for i, (label, _action) in enumerate(bottom_items):
             y = bottom_y + i * 22
-            is_sel = (row == 3 + i)
+            is_sel = (self._menu_row == n_set + i)
             color = theme['selected'] if is_sel else theme['unselected']
             self._display.draw_ttf_centered(y, label, color, FONT_DEJAVU, TTF_MEDIUM)
 
         self._display.flip()
-
-    def _write_next_payload(self, launcher_path):
-        """Write the next payload launcher path for payload.sh to pick up"""
-        next_payload_file = os.path.join(_payload_dir, 'data', '.next_payload')
-        try:
-            with open(next_payload_file, 'w') as f:
-                f.write(launcher_path)
-        except Exception as e:
-            logging.warning("Failed to write .next_payload: %s", e)
 
     def _draw_returning_screen(self, message="Returning to menu..."):
         """Draw transition screen while waiting"""
